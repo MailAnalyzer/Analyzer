@@ -1,29 +1,24 @@
 mod analysis;
-mod cors;
-mod state;
 mod job;
+mod state;
 
-use crate::analysis::{
-    handle_email, init_analyzers, AnalysisResult, JobEvent, ANALYZERS,
-};
+use crate::analysis::{handle_email, init_analyzers, JobEvent, ANALYZERS};
+use crate::job::{JobDescription, JobState};
+use crate::state::{Jobs, ServerState, ServerStateEvent};
+use log::{log, Level};
 use mail_parser::MessageParser;
 use rocket::data::ByteUnit;
 use rocket::form::validate::Len;
 use rocket::futures::StreamExt;
-use rocket::http::Status;
+use rocket::http::{Method, Status};
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::json::Json;
 use rocket::{get, launch, post, routes, Data, State};
+use rocket_cors::{AllowedOrigins, CorsOptions};
 use serde::Serialize;
-use std::ops::Deref;
 use std::sync::Arc;
-use log::{log, Level};
-use rocket::async_stream::stream;
-use tokio::sync::broadcast::{Receiver, Sender};
+use tokio::sync::broadcast::Sender;
 use tokio::sync::Mutex;
-use crate::cors::CORS;
-use crate::job::{Job, JobDescription, JobState};
-use crate::state::{Jobs, ServerState, ServerStateEvent};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +26,7 @@ struct JobCreatedResponse {
     job_id: usize,
 }
 
-#[post("/mail", data = "<data>")]
+#[post("/job", data = "<data>")]
 async fn submit_mail<'a>(
     state: &State<ServerState>,
     data: Data<'_>,
@@ -100,12 +95,10 @@ async fn submit_mail<'a>(
     }
 }
 
-
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ListJobsResponse {
-    jobs: Vec<JobDescription>
+    jobs: Vec<JobDescription>,
 }
 
 #[get("/jobs")]
@@ -120,23 +113,17 @@ async fn list_jobs(state: &State<ServerState>) -> Result<Json<ListJobsResponse>,
     Ok(Json(ListJobsResponse { jobs }))
 }
 
-
 #[get("/jobs_ids")]
 async fn list_jobs_ids(state: &State<ServerState>) -> Result<Json<Vec<usize>>, Status> {
     let jobs = state.jobs.lock().await;
 
-    let jobs: Vec<_> = jobs.iter_jobs()
-        .map(|j| j.id)
-        .collect();
+    let jobs: Vec<_> = jobs.iter_jobs().map(|j| j.id).collect();
 
     Ok(Json(jobs))
 }
 
 #[get("/job/events")]
-async fn listen_new_jobs(
-    state: &State<ServerState>,
-) -> Result<EventStream![], Status> {
-
+async fn listen_new_jobs(state: &State<ServerState>) -> Result<EventStream![], Status> {
     let jobs = state.jobs.lock().await;
     let mut tx = jobs.subscribe_events();
 
@@ -185,15 +172,49 @@ async fn listen_job_events(
     Ok(stream)
 }
 
+#[get("/job/<job_id>/email")]
+async fn get_job_email(state: &State<ServerState>, job_id: usize) -> Result<String, Status> {
+    let jobs = state.jobs.lock().await;
 
+    let Some(job) = jobs.find_job(job_id) else {
+        return Err(Status::NotFound);
+    };
+
+    drop(jobs); //release lock
+
+    Ok(job.email.clone())
+}
 
 #[launch]
 fn rocket() -> _ {
     init_analyzers();
+
+    let cors = CorsOptions::default()
+        .allowed_origins(AllowedOrigins::some_exact(&["http://localhost:5173"]))
+        .allowed_methods(
+            vec![Method::Get, Method::Post, Method::Options]
+                .into_iter()
+                .map(From::from)
+                .collect(),
+        )
+        .allow_credentials(true)
+        .to_cors()
+        .unwrap();
+
     rocket::build()
-        .attach(CORS)
+        .attach(cors)
         .manage(ServerState {
             jobs: Arc::new(Mutex::new(Jobs::new())),
         })
-        .mount("/", routes![submit_mail, list_jobs, listen_job_events, listen_new_jobs, list_jobs_ids])
+        .mount(
+            "/",
+            routes![
+                submit_mail,
+                list_jobs,
+                listen_job_events,
+                listen_new_jobs,
+                list_jobs_ids,
+                get_job_email
+            ],
+        )
 }
