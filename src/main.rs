@@ -17,6 +17,7 @@ use rocket::{get, launch, post, routes, Data, State};
 use rocket_cors::{AllowedOrigins, CorsOptions};
 use serde::Serialize;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::Mutex;
 
@@ -46,7 +47,7 @@ async fn submit_mail<'a>(
             .jobs
             .lock()
             .await
-            .add_job(file_content, ANALYZERS.get().len())
+            .add_job(file_content)
             .await;
 
         let analyzers = ANALYZERS.get().unwrap();
@@ -65,6 +66,7 @@ async fn submit_mail<'a>(
                 while let Ok(event) = rx.recv().await {
                     match event {
                         JobEvent::Progress(result) => job.results.lock().await.push(result),
+                        JobEvent::ExpandedResultCount(new_count) => job.expected_result_count.store(new_count as i32, Ordering::Relaxed),
                         JobEvent::Error(_) => todo!("handle error events"),
                         JobEvent::Done => break,
                     }
@@ -73,7 +75,7 @@ async fn submit_mail<'a>(
                 let mut state_ref = job.state.lock().await;
                 *state_ref = JobState::Analyzed;
 
-                // jobs.lock().await.complete_job(job_id);
+                //TODO jobs.lock().await.complete_job(job_id);
 
                 log!(Level::Info, "Unsubscribed from job {} events", job.id)
             });
@@ -161,10 +163,11 @@ async fn listen_job_events(
 
     let stream = EventStream! {
         while let Ok(event) = rx.recv().await {
-            match event {
-                JobEvent::Progress(result) => yield Event::json(&result).event("result"),
-                JobEvent::Error(_) => todo!("handle error events"),
-                JobEvent::Done => break
+
+            yield Event::json(&event).event("result");
+
+            if let JobEvent::Done | JobEvent::Error(_) = event {
+                break;
             }
         }
     };

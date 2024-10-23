@@ -1,34 +1,40 @@
-use crate::analysis::{AnalysisResult, MailAnalyzer};
+use crate::analysis::{Analysis, AnalysisVerdict, MailAnalyzer};
 use mail_parser::Message;
 use rand::{thread_rng, Rng};
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
-use tokio::runtime::Handle;
-use tokio::task;
 
 pub struct MockAnalyzer;
 
 impl MailAnalyzer for MockAnalyzer {
-    fn analyze(&self, email: Message) -> AnalysisResult {
-        task::block_in_place(|| {
-            Handle::current().block_on(async {
+    fn analyze(&self, email: Message) -> Analysis {
+        let task: Pin<Box<dyn Future<Output = AnalysisVerdict> + Sync + Send>> = Box::pin(async {
+            let range = {
                 let mut rng = thread_rng();
+                rng.gen_range(0..20)
+            };
+            tokio::time::sleep(Duration::from_secs(range)).await;
 
-                tokio::time::sleep(Duration::from_secs(rng.gen_range(0..20))).await;
+            let mut rng = thread_rng();
 
-                let nb_errors = rng.gen_range(0..5);
+            let nb_errors = rng.gen_range(0..5);
 
-                let mut errors = Vec::with_capacity(nb_errors);
-                for i in 0..nb_errors {
-                    errors.push(format!("Error {i}"));
-                }
+            let mut errors = Vec::with_capacity(nb_errors);
+            for i in 0..nb_errors {
+                errors.push(format!("Error {i}"));
+            }
 
-                AnalysisResult::new(
-                    "Mock analysis result".to_string(),
-                    "A generated analysis with no particular meaning. For test purposes.".to_string(),
-                    "No verdict".to_string(),
-                    errors,
-                )
-            })
-        })
+            if errors.is_empty() {
+                AnalysisVerdict::new("mock", &"Mock")
+            } else {
+                AnalysisVerdict::error(&errors)
+            }
+        });
+
+        Analysis {
+            name: "Mock analysis".to_string(),
+            verdicts: vec![Box::pin(task)],
+        }
     }
 }
