@@ -34,14 +34,14 @@ impl Jobs {
         self.jobs.iter()
     }
 
-    pub async fn add_job(&mut self, email_content: String, expected_result_count: usize) -> Arc<Job> {
+    pub async fn add_job(&mut self, email_content: String) -> Arc<Job> {
         self.total_jobs_count += 1;
 
         let job_id = self.total_jobs_count;
 
         let (sx, _) = tokio::sync::broadcast::channel(100);
 
-        let job = Arc::new(Job::new(email_content, job_id, expected_result_count, sx));
+        let job = Arc::new(Job::new(email_content, job_id, sx));
 
         self.jobs.push(job.clone());
         

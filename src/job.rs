@@ -1,19 +1,11 @@
-use std::ops::Deref;
-use std::sync::Arc;
-use tokio::sync::{Mutex};
-use tokio::sync::broadcast::{Receiver, Sender};
+use crate::analysis::{AnalysisResult, JobEvent};
 use mail_parser::{Message, MessageParser};
 use rocket::serde::Serialize;
-use crate::analysis::{AnalysisResult, JobEvent};
-
-pub struct Job {
-    pub email: String,
-    pub state: Mutex<JobState>,
-    pub results: Mutex<Vec<AnalysisResult>>,
-    pub expected_result_count: usize,
-    pub id: usize,
-    pub(crate) event_channel: Arc<Sender<JobEvent>>,
-}
+use std::ops::Deref;
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::Arc;
+use tokio::sync::broadcast::{Receiver, Sender};
+use tokio::sync::Mutex;
 
 pub enum JobState {
     Analyzing,
@@ -21,19 +13,23 @@ pub enum JobState {
     Analyzed,
 }
 
+pub struct Job {
+    pub email: String,
+    pub state: Mutex<JobState>,
+    pub results: Mutex<Vec<AnalysisResult>>,
+    pub expected_result_count: AtomicI32,
+    pub id: usize,
+    pub(crate) event_channel: Arc<Sender<JobEvent>>,
+}
+
 impl Job {
-    pub(crate) fn new(
-        email: String,
-        id: usize,
-        expected_result_count: usize,
-        event_channel: Sender<JobEvent>,
-    ) -> Self {
+    pub(crate) fn new(email: String, id: usize, event_channel: Sender<JobEvent>) -> Self {
         Self {
             email,
             state: Mutex::new(JobState::Analyzing),
-            results: Mutex::new(Vec::with_capacity(expected_result_count)),
+            results: Mutex::new(Vec::new()),
             event_channel: Arc::new(event_channel),
-            expected_result_count,
+            expected_result_count: AtomicI32::new(-1),
             id,
         }
     }
@@ -51,7 +47,7 @@ impl Job {
 #[serde(rename_all = "camelCase")]
 pub struct JobDescription {
     subject: String,
-    target_result_count: usize,
+    target_result_count: Option<usize>,
     error: Option<String>,
     id: usize,
     results: Vec<AnalysisResult>,
@@ -67,6 +63,8 @@ impl JobDescription {
 
         let current_results = job.results.lock().await;
 
+        let result_count = job.expected_result_count.load(Ordering::Acquire);
+
         JobDescription {
             subject: job
                 .email()
@@ -75,7 +73,11 @@ impl JobDescription {
             id: job.id,
             error,
             results: current_results.clone(),
-            target_result_count: job.expected_result_count,
+            target_result_count: if result_count == -1 {
+                None
+            } else {
+                Some(result_count as usize)
+            },
         }
     }
 }
