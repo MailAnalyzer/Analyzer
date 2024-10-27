@@ -1,19 +1,25 @@
-use crate::analysis::{Analysis, AnalysisVerdict, MailAnalyzer};
+use std::sync::Arc;
+use crate::analysis::{AnalysisCommand, AnalysisSetup, AnalysisVerdict, MailAnalyzer};
 use mail_parser::Message;
 use rand::{thread_rng, Rng};
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
 pub struct MockAnalyzer;
 
 impl MailAnalyzer for MockAnalyzer {
-    fn analyze(&self, email: Message) -> Analysis {
-        let task: Pin<Box<dyn Future<Output = AnalysisVerdict> + Sync + Send>> = Box::pin(async {
-            let range = {
-                let mut rng = thread_rng();
-                rng.gen_range(0..20)
-            };
+    fn name(&self) -> String {
+        String::from("Mock")
+    }
+
+    fn analyze(&self, email: Message, mut command: AnalysisCommand) -> AnalysisSetup {
+        let range = {
+            let mut rng = thread_rng();
+            rng.gen_range(0..20)
+        };
+
+        let command = Arc::new(command);
+
+        command.spawn(async move {
             tokio::time::sleep(Duration::from_secs(range)).await;
 
             let mut rng = thread_rng();
@@ -30,11 +36,9 @@ impl MailAnalyzer for MockAnalyzer {
             } else {
                 AnalysisVerdict::error(&errors)
             }
+
         });
 
-        Analysis {
-            name: "Mock analysis".to_string(),
-            verdicts: vec![Box::pin(task)],
-        }
+        command.gen_setup()
     }
 }

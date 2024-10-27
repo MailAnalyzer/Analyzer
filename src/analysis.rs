@@ -1,9 +1,9 @@
-pub mod email_behavior_checker;
+mod auth_checker;
 mod link_checker;
 mod mock_analyzer;
-mod snow_personna_checker;
-mod auth_checker;
+mod nlp_checker;
 
+use crate::analysis::auth_checker::AuthAnalyzer;
 use crate::analysis::link_checker::LinkAnalyzer;
 use crate::analysis::mock_analyzer::MockAnalyzer;
 use mail_parser::{Address, Message, MessageParser};
@@ -11,12 +11,11 @@ use rand::{random, Rng};
 use rocket::serde::json::serde_json;
 use serde::Serialize;
 use std::future::Future;
-use std::pin::Pin;
+use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::OnceCell;
-use tokio::task::JoinSet;
-use crate::analysis::auth_checker::AuthAnalyzer;
 
 pub static ANALYZERS: OnceCell<Vec<Arc<dyn MailAnalyzer>>> = OnceCell::const_new();
 
@@ -59,9 +58,64 @@ impl AnalysisVerdict {
     }
 }
 
-pub struct Analysis {
-    pub name: String,
-    pub verdicts: Vec<Pin<Box<dyn Future<Output = AnalysisVerdict> + Send + Sync>>>,
+pub struct AnalysisSetup {
+    pub expected_verdict_count: usize,
+}
+
+pub struct AnalysisCommand {
+    analysis_name: String,
+    sender: Arc<Sender<JobEvent>>,
+    last_expected_result: AtomicUsize,
+}
+
+impl Drop for AnalysisCommand {
+    fn drop(&mut self) {
+        println!("Analysis Command {} dropped !", self.analysis_name);
+        self.sender
+            .send(JobEvent::AnalysisDone(self.analysis_name.clone()))
+            .unwrap();
+    }
+}
+
+impl AnalysisCommand {
+    fn new(name: String, sender: Arc<Sender<JobEvent>>) -> Self {
+        Self {
+            analysis_name: name,
+            sender,
+            last_expected_result: AtomicUsize::default(),
+        }
+    }
+
+    fn get_expected_result_count(&self) -> usize {
+        self.last_expected_result.load(Ordering::Acquire)
+    }
+
+    fn result(&self, verdict: AnalysisVerdict) {
+        let result = AnalysisResult::new(self.analysis_name.clone(), verdict);
+        self.sender.send(JobEvent::Progress(result)).unwrap();
+    }
+
+    fn set_expected_results(&mut self, new_count: usize) {
+        let diff = new_count - self.get_expected_result_count();
+        self.last_expected_result.store(new_count, Ordering::Relaxed);
+        self.sender
+            .send(JobEvent::ExpandedResultCount(diff))
+            .unwrap();
+    }
+
+    fn spawn(self: &Arc<Self>, task: impl Future<Output=AnalysisVerdict> + Send + 'static) {
+        let arc = self.clone();
+        tokio::spawn(async move {
+            arc.result(task.await)
+        });
+        self.last_expected_result.fetch_add(1, Ordering::Acquire);
+    }
+
+    fn gen_setup(&self) -> AnalysisSetup {
+        AnalysisSetup {
+            expected_verdict_count: self.last_expected_result.load(Ordering::Acquire)
+        }
+    }
 }
 
 impl AnalysisResult {
@@ -85,63 +139,39 @@ pub enum JobEvent {
     Error(String),
     ExpandedResultCount(usize),
     Progress(AnalysisResult),
-    Done,
+    AnalysisDone(String),
+    JobComplete
 }
 
-//TODO use async_trait
 pub trait MailAnalyzer: Send + Sync {
-    fn analyze(&self, email: Message) -> Analysis;
+    fn name(&self) -> String;
+    fn analyze(&self, email: Message, command: AnalysisCommand) -> AnalysisSetup;
 }
 
-pub async fn handle_email(
+pub async fn start_email_analysis(
     email_string: &str,
     analyzers: Vec<Arc<dyn MailAnalyzer>>,
     events_publisher: Arc<Sender<JobEvent>>,
 ) {
-    let mut verdict_join_set: JoinSet<()> = JoinSet::new();
-    let mut verdict_total_count: usize = 0;
+    let mut total_expected_verdict_count = 0;
+    for analyzer in analyzers {
+        let email_string = String::from(email_string);
 
-    let analysis: Vec<_> = analyzers
-        .iter()
-        .map(|analyzer| {
-            let email_string = String::from(email_string);
+        let email = MessageParser::new()
+            .parse(&email_string)
+            .expect("valid email");
 
-            let email = MessageParser::new()
-                .parse(&email_string)
-                .expect("valid email");
-            let analysis = analyzer.analyze(email);
+        let command = AnalysisCommand::new(analyzer.name(), events_publisher.clone());
+        println!("Launched {}", command.analysis_name);
+        let setup = analyzer.analyze(email, command);
 
-            verdict_total_count += analysis.verdicts.len();
-            analysis
-        })
-        .collect();
-
-    // workaround for desynchronisation after a submitted job
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    events_publisher
-        .send(JobEvent::ExpandedResultCount(verdict_total_count))
-        .unwrap();
-
-    for analysis in analysis {
-        for verdict in analysis.verdicts {
-            let analysis_name = analysis.name.clone();
-            let channel = events_publisher.clone();
-
-            verdict_join_set.spawn(async move {
-                let verdict = verdict.await;
-
-                channel
-                    .send(JobEvent::Progress(AnalysisResult::new(
-                        analysis_name,
-                        verdict,
-                    )))
-                    .unwrap();
-            });
-        }
+        total_expected_verdict_count += setup.expected_verdict_count;
     }
 
-    verdict_join_set.join_all().await;
+    events_publisher.send(JobEvent::ExpandedResultCount(total_expected_verdict_count)).unwrap();
+
+    //FIXME workaround for app's desynchronisation after a job is submitted
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 }
 
 fn extract_sender_address(mail: Message) -> String {

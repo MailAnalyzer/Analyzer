@@ -1,34 +1,38 @@
-use crate::analysis::{Analysis, AnalysisVerdict, MailAnalyzer};
+use crate::analysis::{AnalysisCommand, AnalysisSetup, AnalysisVerdict, MailAnalyzer};
 use mail_auth::common::verify::VerifySignature;
 use mail_auth::{AuthenticatedMessage, DkimResult, DmarcResult, Resolver, SpfOutput, SpfResult};
 use mail_parser::{Address, Host, Message, MessageParser};
 use rocket::serde::Serialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct AuthAnalyzer;
 
 impl MailAnalyzer for AuthAnalyzer {
-    fn analyze(&self, email: Message) -> Analysis {
+    fn name(&self) -> String {
+        String::from("Authentication Checks")
+    }
+    
+    fn analyze(&self, email: Message, command: AnalysisCommand) -> AnalysisSetup {
         let email_string = std::str::from_utf8(&email.raw_message).unwrap().to_string();
         let resolver = Resolver::new_system_conf().unwrap();
+
+        let command = Arc::new(command);
 
         macro_rules! wrap_check_task {
             ($fun:expr) => {{
                 let resolver = resolver.clone();
                 let email_string = email_string.clone();
-                async move { tokio::spawn($fun(resolver, email_string)).await.unwrap() }
+                command.spawn($fun(resolver, email_string));
             }};
         }
 
-        Analysis {
-            name: "Authentication Checks".to_string(),
-            verdicts: vec![
-                Box::pin(wrap_check_task!(verify_dkim)),
-                Box::pin(wrap_check_task!(verify_arc_chain)),
-                Box::pin(wrap_check_task!(verify_spf)),
-                Box::pin(wrap_check_task!(verify_dmarc)),
-            ],
-        }
+        wrap_check_task!(verify_dkim);
+        wrap_check_task!(verify_arc_chain);
+        wrap_check_task!(verify_spf);
+        wrap_check_task!(verify_dmarc);
+
+        command.gen_setup()
     }
 }
 
@@ -52,10 +56,18 @@ impl From<&DkimResult> for DKIMAnalysisVerdict {
     fn from(value: &DkimResult) -> Self {
         match value {
             DkimResult::Pass => DKIMAnalysisVerdict::Pass,
-            DkimResult::Neutral(e) => DKIMAnalysisVerdict::Neutral { value: e.to_string() },
-            DkimResult::Fail(e) => DKIMAnalysisVerdict::Fail{ value: e.to_string() },
-            DkimResult::PermError(e) => DKIMAnalysisVerdict::PermError{ value: e.to_string() },
-            DkimResult::TempError(e) => DKIMAnalysisVerdict::TempError{ value: e.to_string() },
+            DkimResult::Neutral(e) => DKIMAnalysisVerdict::Neutral {
+                value: e.to_string(),
+            },
+            DkimResult::Fail(e) => DKIMAnalysisVerdict::Fail {
+                value: e.to_string(),
+            },
+            DkimResult::PermError(e) => DKIMAnalysisVerdict::PermError {
+                value: e.to_string(),
+            },
+            DkimResult::TempError(e) => DKIMAnalysisVerdict::TempError {
+                value: e.to_string(),
+            },
             DkimResult::None => DKIMAnalysisVerdict::None,
         }
     }
@@ -125,17 +137,20 @@ async fn check_spf(resolver: Resolver, msg: String) -> SpfOutput {
     };
 
     let received = msg.received().unwrap();
-    
-    let sender_ip = received.from_ip.unwrap();
-    let sender_host_domain = match received.from().unwrap() {
-        Host::Name(domain) => domain.to_string(),
-        Host::IpAddr(addr) => addr.to_string(),
+
+    let Some(sender_ip) = received.from_ip else {
+        return SpfOutput::default()
+    };
+    let sender_host_domain = match received.from() {
+        None => return SpfOutput::default(),
+        Some(Host::Name(domain)) => domain.to_string(),
+        Some(Host::IpAddr(addr)) => addr.to_string(),
     };
 
     let helo_domain = match received.helo() {
         Some(Host::Name(domain)) => domain.to_string(),
         Some(Host::IpAddr(addr)) => addr.to_string(),
-        None => return SpfOutput::default()
+        None => return SpfOutput::default(),
     };
 
     resolver

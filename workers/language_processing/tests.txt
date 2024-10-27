@@ -1,0 +1,123 @@
+I'm going to give you a text, You will understand the text and extract ALL the organizations and persons ONLY, and the information that are related to them.
+First, identify all the organizations and the products, make sure they are all unique and are not a synonym of another.
+Second, you will identify the persons and the product.
+For each entity (so organizations, persons and products), you will search all the information IN THE TEXT ONLY that are related to them
+You'll respond in JSON in english.
+
+Here is the text :
+------
+
+Microsoft Corporation,One Microsoft Way,Redmond, WA 98052
+Déclaration de confidentialité
+|
+Se désabonner
+Copyright 2024 Microsoft Corporation
+Un abonnement Microsoft365 Personnel ou Familial est requis. La protection des appareils ne remplace pas la protection existante contre les programmes malveillants sur les appareils iOS et Windows. La protection de la confidentialité (VPN) est disponible dans certains pays sur les appareils Windows, MacOS, iOS et Android. Certains services de streaming sont exclus. Au-delà de 50Go par mois, la vitesse de transfert des données peut être limitée.
+4
+Un compte Microsoft est requis. Jusqu’à 5Go de stockage Microsoft inclus. Les transferts de données de plus de 5Go nécessitent un abonnement Microsoft ou un essai actif.
+3
+Windows peut sauvegarder la plupart des fichiers, paramètres et applications des ordinateurs fonctionnant sous Windows 10 et versions ultérieures. La restauration est disponible sur Windows11 22H2 et versions ultérieures. Des restrictions géographiques peuvent s’appliquer.
+2
+Afin d’utiliser la fonctionnalité Windows Backup pour restaurer les informations sur un ordinateur Windows11, lors de la configuration initiale de l’appareil, vous devez vous connecter avec le même compte Microsoft que celui utilisé pour la sauvegarde de l’ordinateur Windows10.
+1
+❯
+En savoir plus
+❯
+En savoir plus
+Le support de Windows\u{a0}10 prendra fin en octobre\u{a0}2025.
+❯
+En savoir plus sur Outlook pour Windows
+Il est temps de changer de style. Choisissez parmi des thèmes classiques et richement travaillés pour personnaliser votre expérience Windows avec Outlook, ou adoptez le mode sombre pour souligner vos couleurs automnales préférées.
+Mettez votre Outlook aux couleurs de saison
+❯
+Créer votre fond d’écran
+Créez un fond d’écran personnalisé en phase avec votre humeur automnale. Décrivez ce que vous souhaitez voir et l’IA générera des propositions originales. Vous n’aurez plus qu’à faire votre choix.
+Laissez-vous emporter par le tourbillon de l’automne avec Microsoft Designer
+Se protéger
+4
+Renforcez votre sécurité en ligne avec Microsoft Defender. Protégez les appareils et la confidentialité de toute la famille.
+Octobre est le mois de la cybersécurité
+❯
+Essayer Windows Backup
+2,3
+, vous avez la possibilité de le démarrer avec vos paramètres préférés.
+1
+Ne vous laissez plus intimider par vos nouveaux appareils: retrouvez vos marques avec Windows Backup. Lorsque vous vous connectez pour la première fois à votre nouvel ordinateur avec votre compte Microsoft
+La nouveauté sans l’inconnu
+❯
+Regarder la vidéo
+Découvrez comment vous pouvez donner vie à tous vos rêves créatifs avec un ordinateur Surface Copilot+ PC. Vous souhaitez percer les secrets des artistes et savoir comment ils utilisent ces appareils? Découvrez le processus créatif de Karl Ndieli pour ses séances photo dans la vidéo ci-dessous.
+Votre nouveau superpouvoir
+❯
+Acheter Microsoft\u{a0}365
+Créez des invitations, partagez vos photos de famille et mettez vos recettes en forme avec Microsoft\u{a0}365
+❯
+Découvrir la sécurité Windows\u{a0}11
+Utilisez votre ordinateur en toute confidentialité au travail, chez vous et pendant vos déplacements
+❯
+Commencer à faire des emplettes sur Edge
+Trouvez tout ce qui vous intéresse au meilleur prix et amusez-vous en faisant votre shopping
+❯
+Essayer Copilot
+Passez plus de temps en famille\u{a0}: laissez l’IA se charger de trouver les recettes et les idées de déguisements
+Simplifiez-vous la vie cette saison
+Afficher sous forme de page Web
+Créez des invitations, protégez vos fichiers et choisissez le style de votre espace numérique en toute simplicité.
+Votre guide Microsoft pour un automne chaleureux et créatif
+Microsoft Corporation,One Microsoft Way,Redmond, WA 98052
+Déclaration de confidentialité
+|
+Se désabonner
+Copyright 2024 Microsoft Corporation
+Un abonnement Microsoft365 Personnel ou Familial est requis. La protection des appareils ne remplace pas la protection existante contre les programmes malveillants sur les appareils iOS et Windows. La protection de la confidentialité (VPN) est disponible dans certains pays sur les appareils Windows, MacOS, iOS et Android. Certains services de streaming sont exclus. Au-delà de 50Go par mois, la vitesse de transfert des données peut être limitée.
+4
+Un compte Microsoft est requis. Jusqu’à 5Go de stockage Microsoft inclus. Les transferts de données de plus de 5Go nécessitent un abonnement Microsoft ou un essai actif.
+3
+Windows peut sauvegarder la plupart des fichiers, paramètres et applications des ordinateurs fonctionnant sous Windows 10 et versions ultérieures. La restauration est disponible sur Windows11 22H2 et versions ultérieures. Des restrictions géographiques peuvent s’appliquer.
+2
+Afin d’utiliser la fonctionnalité Windows Backup pour restaurer les informations sur un ordinateur Windows11, lors de la configuration initiale de l’appareil, vous devez vous connecter avec le même compte Microsoft que celui utilisé pour la sauvegarde de l’ordinateur Windows10.
+1
+❯
+En savoir plus
+❯
+En savoir plus
+Le support de Windows\u{a0}10 prendra fin en octobre\u{a0}2025.
+❯
+En savoir plus sur Outlook pour Windows
+Il est temps de changer de style. Choisissez parmi des thèmes classiques et richement travaillés pour personnaliser votre expérience Windows avec Outlook, ou adoptez le mode sombre pour souligner vos couleurs automnales préférées.
+Mettez votre Outlook aux couleurs de saison
+❯
+Créer votre fond d’écran
+Créez un fond d’écran personnalisé en phase avec votre humeur automnale. Décrivez ce que vous souhaitez voir et l’IA générera des propositions originales. Vous n’aurez plus qu’à faire votre choix.
+Laissez-vous emporter par le tourbillon de l’automne avec Microsoft Designer
+Se protéger
+4
+Renforcez votre sécurité en ligne avec Microsoft Defender. Protégez les appareils et la confidentialité de toute la famille.
+Octobre est le mois de la cybersécurité
+❯
+Essayer Windows Backup
+2,3
+, vous avez la possibilité de le démarrer avec vos paramètres préférés.
+1
+Ne vous laissez plus intimider par vos nouveaux appareils: retrouvez vos marques avec Windows Backup. Lorsque vous vous connectez pour la première fois à votre nouvel ordinateur avec votre compte Microsoft
+La nouveauté sans l’inconnu
+❯
+Regarder la vidéo
+Découvrez comment vous pouvez donner vie à tous vos rêves créatifs avec un ordinateur Surface Copilot+ PC. Vous souhaitez percer les secrets des artistes et savoir comment ils utilisent ces appareils? Découvrez le processus créatif de Karl Ndieli pour ses séances photo dans la vidéo ci-dessous.
+Votre nouveau superpouvoir
+❯
+Acheter Microsoft\u{a0}365
+Créez des invitations, partagez vos photos de famille et mettez vos recettes en forme avec Microsoft\u{a0}365
+❯
+Découvrir la sécurité Windows\u{a0}11
+Utilisez votre ordinateur en toute confidentialité au travail, chez vous et pendant vos déplacements
+❯
+Commencer à faire des emplettes sur Edge
+Trouvez tout ce qui vous intéresse au meilleur prix et amusez-vous en faisant votre shopping
+❯
+Essayer Copilot
+Passez plus de temps en famille\u{a0}: laissez l’IA se charger de trouver les recettes et les idées de déguisements
+Simplifiez-vous la vie cette saison
+Afficher sous forme de page Web
+Créez des invitations, protégez vos fichiers et choisissez le style de votre espace numérique en toute simplicité.
+Votre guide Microsoft pour un automne chaleureux et créatif

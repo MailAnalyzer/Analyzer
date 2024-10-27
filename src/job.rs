@@ -2,7 +2,7 @@ use crate::analysis::{AnalysisResult, JobEvent};
 use mail_parser::{Message, MessageParser};
 use rocket::serde::Serialize;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::Mutex;
@@ -20,6 +20,7 @@ pub struct Job {
     pub expected_result_count: AtomicI32,
     pub id: usize,
     pub(crate) event_channel: Arc<Sender<JobEvent>>,
+    is_complete: AtomicBool,
 }
 
 impl Job {
@@ -30,6 +31,7 @@ impl Job {
             results: Mutex::new(Vec::new()),
             event_channel: Arc::new(event_channel),
             expected_result_count: AtomicI32::new(-1),
+            is_complete: AtomicBool::new(false),
             id,
         }
     }
@@ -41,6 +43,14 @@ impl Job {
     pub fn subscribe_events(&self) -> Receiver<JobEvent> {
         self.event_channel.subscribe()
     }
+    
+    pub fn is_complete(&self) -> bool {
+        self.is_complete.load(Ordering::Acquire)
+    }
+    
+    pub fn mark_as_complete(&self) {
+        self.is_complete.store(true, Ordering::Release);
+    }
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -51,6 +61,7 @@ pub struct JobDescription {
     error: Option<String>,
     id: usize,
     results: Vec<AnalysisResult>,
+    is_complete: bool
 }
 
 impl JobDescription {
@@ -78,6 +89,7 @@ impl JobDescription {
             } else {
                 Some(result_count as usize)
             },
+            is_complete: job.is_complete.load(Ordering::Acquire),
         }
     }
 }

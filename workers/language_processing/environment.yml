@@ -1,0 +1,12 @@
+name: language_processing
+
+channels:
+  - conda-forge
+
+dependencies:
+  - pip
+  - flask
+  - llama_cpp
+  - pip:
+      - transformers
+      - torch

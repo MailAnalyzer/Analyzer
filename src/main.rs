@@ -1,8 +1,9 @@
 mod analysis;
 mod job;
+mod pipeline;
 mod state;
 
-use crate::analysis::{handle_email, init_analyzers, JobEvent, ANALYZERS};
+use crate::analysis::{init_analyzers, start_email_analysis, JobEvent, ANALYZERS};
 use crate::job::{JobDescription, JobState};
 use crate::state::{Jobs, ServerState, ServerStateEvent};
 use log::{log, Level};
@@ -16,8 +17,10 @@ use rocket::serde::json::Json;
 use rocket::{get, launch, post, routes, Data, State};
 use rocket_cors::{AllowedOrigins, CorsOptions};
 use serde::Serialize;
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::ops::Index;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::Mutex;
 
@@ -43,18 +46,15 @@ async fn submit_mail<'a>(
     let is_valid_email = MessageParser::new().parse(&file_content).is_some();
 
     if is_valid_email {
-        let job = state
-            .jobs
-            .lock()
-            .await
-            .add_job(file_content)
-            .await;
+        let job = state.jobs.lock().await.add_job(file_content).await;
 
         let analyzers = ANALYZERS.get().unwrap();
 
         let job_id = job.id;
 
         let event_channel = job.event_channel.clone();
+
+        let mut remaining_analyzers: Vec<_> = analyzers.iter().map(|a| a.name()).collect();
 
         {
             let job = job.clone();
@@ -66,9 +66,18 @@ async fn submit_mail<'a>(
                 while let Ok(event) = rx.recv().await {
                     match event {
                         JobEvent::Progress(result) => job.results.lock().await.push(result),
-                        JobEvent::ExpandedResultCount(new_count) => job.expected_result_count.store(new_count as i32, Ordering::Relaxed),
+                        JobEvent::ExpandedResultCount(new_count) => {
+                            job.expected_result_count
+                                .fetch_add(new_count as i32, Ordering::Relaxed);
+                        }
                         JobEvent::Error(_) => todo!("handle error events"),
-                        JobEvent::Done => break,
+                        JobEvent::AnalysisDone(name) => {
+                            remaining_analyzers.retain(|a| a != &name);
+                            if remaining_analyzers.is_empty() {
+                                job.mark_as_complete();
+                                break;
+                            }
+                        }
                     }
                 }
 
@@ -81,15 +90,7 @@ async fn submit_mail<'a>(
             });
         }
 
-        let job = job.clone();
-
-        tokio::spawn(async move {
-            handle_email(&job.email, analyzers.clone(), event_channel.clone()).await;
-
-            event_channel
-                .send(JobEvent::Done)
-                .expect("Could not send close event");
-        });
+        start_email_analysis(&job.email, analyzers.clone(), event_channel.clone()).await;
 
         Ok(Json(JobCreatedResponse { job_id }))
     } else {
@@ -166,7 +167,11 @@ async fn listen_job_events(
 
             yield Event::json(&event).event("result");
 
-            if let JobEvent::Done | JobEvent::Error(_) = event {
+            if let JobEvent::Error(_) | JobEvent::JobComplete = event {
+                break;
+            }
+
+            if job.is_complete() { //in case the JobComplete event has not been sent/received
                 break;
             }
         }

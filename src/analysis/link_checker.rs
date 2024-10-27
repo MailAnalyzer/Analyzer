@@ -1,21 +1,25 @@
-use crate::analysis::{Analysis, AnalysisVerdict, MailAnalyzer};
+use crate::analysis::{AnalysisCommand, AnalysisSetup, AnalysisVerdict, MailAnalyzer};
+use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
 use base64::Engine;
-use mail_parser::Message;
+use mail_parser::{Address, Message};
 use regex::bytes::Regex;
-use reqwest::{Client, Response};
+use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::future::Future;
-use std::pin::Pin;
+use std::sync::Arc;
+use url::Url;
 
 pub struct LinkAnalyzer;
 
+#[async_trait]
 impl MailAnalyzer for LinkAnalyzer {
-    fn analyze(&self, email: Message) -> Analysis {
-        let regex = Regex::new(r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)").unwrap();
+    fn name(&self) -> String {
+        String::from("Links analysis")
+    }
 
-        let mut tasks = Vec::new();
+    fn analyze(&self, email: Message, command: AnalysisCommand) -> AnalysisSetup {
+        let link_regex = Regex::new(r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)").unwrap();
 
         let client = Client::new();
 
@@ -25,14 +29,14 @@ impl MailAnalyzer for LinkAnalyzer {
         for part in email.text_bodies() {
             let text = part.text_contents().unwrap();
 
-            for url_match in regex.captures_iter(text.as_ref()).map(|c| c.get(0)) {
+            for url_match in link_regex.captures_iter(text.as_ref()).map(|c| c.get(0)) {
                 let url_match = url_match.unwrap();
 
                 let url = std::str::from_utf8(url_match.as_bytes())
                     .unwrap()
                     .to_string();
 
-                let url = url::Url::parse(&url).unwrap();
+                let url = Url::parse(&url).unwrap();
                 let domain = url.domain().unwrap();
 
                 domains.insert(domain.to_string());
@@ -40,24 +44,41 @@ impl MailAnalyzer for LinkAnalyzer {
             }
         }
 
-        for url in urls {
-            let task: Pin<Box<dyn Future<Output = AnalysisVerdict> + Send + Sync>> =
-                Box::pin(analyze_url(url.to_string(), client.clone()));
+        let addresses = match email.from().unwrap() {
+            Address::List(l) => {
+                l.clone()
+            }
+            Address::Group(l) => {
+                l.iter().flat_map(|g| g.addresses.clone()).collect()
+            }
+        };
 
-            tasks.push(task)
+        for address in addresses {
+            let address = address.address().unwrap();
+            match Url::try_from(address) {
+                Ok(url) => {
+                    urls.insert(url.to_string());
+                }
+                Err(_) => {
+                    if let Some(domain) = address.rsplit('@').next() {
+                        domains.insert(domain.to_string());
+                    }
+                }
+            }
+        }
+
+        let command = Arc::new(command);
+
+        for url in urls {
+            let client = client.clone();
+            command.spawn(analyze_url(url.to_string(), client));
         }
 
         for domain in domains {
-            let task: Pin<Box<dyn Future<Output = AnalysisVerdict> + Send + Sync>> =
-                Box::pin(analyze_domain(domain, client.clone()));
-
-            tasks.push(task);
+            let client = client.clone();
+            command.spawn(analyze_domain(domain.to_string(), client));
         }
-
-        Analysis {
-            name: "Links analysis".to_string(),
-            verdicts: tasks,
-        }
+        command.gen_setup()
     }
 }
 
@@ -75,23 +96,26 @@ async fn analyze_url(url: String, client: Client) -> AnalysisVerdict {
     let response = request_url_analysis(&url, &client).await;
     let mut response = match response {
         Ok(response) => response,
-        Err(err) => return AnalysisVerdict::error(&vec![format!("{err:?}")]),
+        Err(err) => return AnalysisVerdict::error(&vec![format!("Error url analysis `{url}`: {err:?}")]),
     };
 
     //if no analysis is found, request a new one to VT and wait, then try again
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
+    if response.status() == StatusCode::NOT_FOUND {
         submit_url_analysis(&url, &client).await;
 
         response = match request_url_analysis(&url, &client).await {
             Ok(response) => response,
-            Err(err) => return AnalysisVerdict::error(&vec![format!("{err:?}")]),
+            Err(err) => return AnalysisVerdict::error(&vec![format!("Error url analysis `{url}`: {err:?}")]),
         };
+        if response.status() == StatusCode::NOT_FOUND {
+            return AnalysisVerdict::error(&"404 Not Found");
+        }
     }
 
     let content = response.text().await;
     match content {
         Ok(content) => AnalysisVerdict::new("url", &content),
-        Err(err) => AnalysisVerdict::error(&vec![format!("{err:?}")]),
+        Err(err) => AnalysisVerdict::error(&vec![format!("Error url analysis `{url}`: {err:?}")]),
     }
 }
 
@@ -116,12 +140,17 @@ struct AnalysisData {
 
 #[derive(Deserialize)]
 struct AnalysisAttributes {
-    results: AnalysisResults,
+    status: String,
 }
 
 #[derive(Deserialize)]
-struct AnalysisResults {
-    status: String,
+struct AnalysisSubmitResponse {
+    data: AnalysisSubmitResponseData,
+}
+
+#[derive(Deserialize)]
+struct AnalysisSubmitResponseData {
+    id: String,
 }
 
 async fn submit_url_analysis(url: &str, client: &Client) {
@@ -133,26 +162,29 @@ async fn submit_url_analysis(url: &str, client: &Client) {
         .await
         .unwrap();
 
-    let analysis_id = response.text().await.unwrap();
+    let analysis_id = response
+        .json::<AnalysisSubmitResponse>()
+        .await
+        .unwrap()
+        .data
+        .id;
 
     // check analysis completion status periodically until it is completed
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
         let response = client
-            .post(format!(
+            .get(format!(
                 "https://www.virustotal.com/api/v3/analyses/{analysis_id}"
             ))
             .header("x-apikey", VT_KEY)
-            .form(&[("url", url)])
             .send()
             .await
             .unwrap();
 
+        let response = response.json::<AnalysisResponse>().await.unwrap();
 
-        let response = response.json::<AnalysisData>().await.unwrap();
-
-        if response.attributes.results.status == "completed" {
+        if response.data.attributes.status == "completed" {
             break;
         }
     }
@@ -169,12 +201,12 @@ async fn analyze_domain(domain: String, client: Client) -> AnalysisVerdict {
 
     let response = match response {
         Ok(response) => response,
-        Err(err) => return AnalysisVerdict::error(&vec![format!("{err:?}")]),
+        Err(err) => return AnalysisVerdict::error(&vec![format!("Error domain analysis `{domain}`: {err:?}")]),
     };
 
     let content = response.text().await;
     match content {
         Ok(content) => AnalysisVerdict::new("domain", &content),
-        Err(err) => AnalysisVerdict::error(&vec![format!("{err:?}")]),
+        Err(err) => AnalysisVerdict::error(&vec![format!("Error domain analysis `{domain}`: {err:?}")]),
     }
 }
