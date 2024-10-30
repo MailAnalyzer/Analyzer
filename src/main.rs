@@ -78,6 +78,7 @@ async fn submit_mail<'a>(
                                 break;
                             }
                         }
+                        _ => {}
                     }
                 }
 
