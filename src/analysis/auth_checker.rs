@@ -186,14 +186,14 @@ async fn verify_dmarc(resolver: Resolver, msg_string: String) -> AnalysisVerdict
 
     let dkim_value = match dmarc_output.dkim_result() {
         DmarcResult::Pass => "pass",
-        DmarcResult::Fail(e) => "fail",
+        DmarcResult::Fail(_) => "fail",
         DmarcResult::TempError(e) | DmarcResult::PermError(e) => "error",
         DmarcResult::None => "unknown",
     };
 
     let spf_value = match dmarc_output.spf_result() {
         DmarcResult::Pass => "pass",
-        DmarcResult::Fail(e) => "fail",
+        DmarcResult::Fail(_) => "fail",
         DmarcResult::TempError(e) | DmarcResult::PermError(e) => "error",
         DmarcResult::None => "unknown",
     };
