@@ -1,18 +1,17 @@
 mod auth_checker;
 mod link_checker;
-mod mock_analyzer;
 mod nlp_checker;
 
 use crate::analysis::auth_checker::AuthAnalyzer;
 use crate::analysis::link_checker::LinkAnalyzer;
-use crate::analysis::mock_analyzer::MockAnalyzer;
-use mail_parser::{Address, Message, MessageParser};
-use rand::{random, Rng};
+use crate::analysis::nlp_checker::NLPChecker;
+use crate::command::AnalysisCommand;
+use crate::email::OwnedEmail;
+use mail_parser::{Address, Message};
+use rand::random;
 use rocket::serde::json::serde_json;
 use serde::Serialize;
 use std::future::Future;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::OnceCell;
@@ -23,7 +22,7 @@ pub fn init_analyzers() {
     let analyzers: Vec<Arc<dyn MailAnalyzer>> = vec![
         Arc::new(LinkAnalyzer),
         Arc::new(AuthAnalyzer),
-        Arc::new(MockAnalyzer),
+        Arc::new(NLPChecker),
     ];
     if ANALYZERS.set(analyzers).is_err() {
         panic!("analyzers should not be already initialized")
@@ -62,62 +61,6 @@ pub struct AnalysisSetup {
     pub expected_verdict_count: usize,
 }
 
-pub struct AnalysisCommand {
-    analysis_name: String,
-    sender: Arc<Sender<JobEvent>>,
-    last_expected_result: AtomicUsize,
-}
-
-impl Drop for AnalysisCommand {
-    fn drop(&mut self) {
-        println!("Analysis Command {} dropped !", self.analysis_name);
-        self.sender
-            .send(JobEvent::AnalysisDone(self.analysis_name.clone()))
-            .unwrap();
-    }
-}
-
-impl AnalysisCommand {
-    fn new(name: String, sender: Arc<Sender<JobEvent>>) -> Self {
-        Self {
-            analysis_name: name,
-            sender,
-            last_expected_result: AtomicUsize::default(),
-        }
-    }
-
-    fn get_expected_result_count(&self) -> usize {
-        self.last_expected_result.load(Ordering::Acquire)
-    }
-
-    fn result(&self, verdict: AnalysisVerdict) {
-        let result = AnalysisResult::new(self.analysis_name.clone(), verdict);
-        self.sender.send(JobEvent::Progress(result)).unwrap();
-    }
-
-    fn set_expected_results(&mut self, new_count: usize) {
-        let diff = new_count - self.get_expected_result_count();
-        self.last_expected_result.store(new_count, Ordering::Relaxed);
-        self.sender
-            .send(JobEvent::ExpandedResultCount(diff))
-            .unwrap();
-    }
-
-    fn spawn(self: &Arc<Self>, task: impl Future<Output=AnalysisVerdict> + Send + 'static) {
-        let arc = self.clone();
-        tokio::spawn(async move {
-            arc.result(task.await)
-        });
-        self.last_expected_result.fetch_add(1, Ordering::Acquire);
-    }
-
-    fn gen_setup(&self) -> AnalysisSetup {
-        AnalysisSetup {
-            expected_verdict_count: self.last_expected_result.load(Ordering::Acquire)
-        }
-    }
-}
-
 impl AnalysisResult {
     pub fn new(analysis_name: String, verdict: AnalysisVerdict) -> Self {
         let id = random();
@@ -140,12 +83,12 @@ pub enum JobEvent {
     ExpandedResultCount(usize),
     Progress(AnalysisResult),
     AnalysisDone(String),
-    JobComplete
+    JobComplete,
 }
 
 pub trait MailAnalyzer: Send + Sync {
     fn name(&self) -> String;
-    fn analyze(&self, email: Message, command: AnalysisCommand) -> AnalysisSetup;
+    fn analyze(&self, email: OwnedEmail, command: AnalysisCommand) -> AnalysisSetup;
 }
 
 pub async fn start_email_analysis(
@@ -157,18 +100,16 @@ pub async fn start_email_analysis(
     for analyzer in analyzers {
         let email_string = String::from(email_string);
 
-        let email = MessageParser::new()
-            .parse(&email_string)
-            .expect("valid email");
-
         let command = AnalysisCommand::new(analyzer.name(), events_publisher.clone());
-        println!("Launched {}", command.analysis_name);
-        let setup = analyzer.analyze(email, command);
+        println!("Launched {}", analyzer.name());
+        let setup = analyzer.analyze(OwnedEmail::new(email_string), command);
 
         total_expected_verdict_count += setup.expected_verdict_count;
     }
 
-    events_publisher.send(JobEvent::ExpandedResultCount(total_expected_verdict_count)).unwrap();
+    events_publisher
+        .send(JobEvent::ExpandedResultCount(total_expected_verdict_count))
+        .unwrap();
 
     //FIXME workaround for app's desynchronisation after a job is submitted
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;

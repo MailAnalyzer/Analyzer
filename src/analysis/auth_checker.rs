@@ -1,10 +1,11 @@
-use crate::analysis::{AnalysisCommand, AnalysisSetup, AnalysisVerdict, MailAnalyzer};
+use crate::analysis::{AnalysisSetup, AnalysisVerdict, MailAnalyzer};
+use crate::command::AnalysisCommand;
+use crate::email::OwnedEmail;
 use mail_auth::common::verify::VerifySignature;
 use mail_auth::{AuthenticatedMessage, DkimResult, DmarcResult, Resolver, SpfOutput, SpfResult};
-use mail_parser::{Address, Host, Message, MessageParser};
+use mail_parser::{Address, Host, MessageParser};
 use rocket::serde::Serialize;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub struct AuthAnalyzer;
 
@@ -12,12 +13,10 @@ impl MailAnalyzer for AuthAnalyzer {
     fn name(&self) -> String {
         String::from("Authentication Checks")
     }
-    
-    fn analyze(&self, email: Message, command: AnalysisCommand) -> AnalysisSetup {
-        let email_string = std::str::from_utf8(&email.raw_message).unwrap().to_string();
-        let resolver = Resolver::new_system_conf().unwrap();
 
-        let command = Arc::new(command);
+    fn analyze(&self, email: OwnedEmail, command: AnalysisCommand) -> AnalysisSetup {
+        let email_string = String::from(email.raw_str());
+        let resolver = Resolver::new_system_conf().unwrap();
 
         macro_rules! wrap_check_task {
             ($fun:expr) => {{
@@ -32,7 +31,7 @@ impl MailAnalyzer for AuthAnalyzer {
         wrap_check_task!(verify_spf);
         wrap_check_task!(verify_dmarc);
 
-        command.gen_setup()
+        command.validate()
     }
 }
 
@@ -136,7 +135,9 @@ async fn check_spf(resolver: Resolver, msg: String) -> SpfOutput {
         Address::Group(g) => g[0].addresses[0].address().unwrap(),
     };
 
-    let received = msg.received().unwrap();
+    let Some(received) = msg.received() else {
+        return SpfOutput::default();
+    };
 
     let Some(sender_ip) = received.from_ip else {
         return SpfOutput::default()

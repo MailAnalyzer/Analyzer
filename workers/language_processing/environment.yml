@@ -1,12 +1,13 @@
-name: language_processing
+name: nlp
 
 channels:
   - conda-forge
 
 dependencies:
+  - llama-cpp-python
+  - requests
+  - pytesseract
+  - janus
   - pip
-  - flask
-  - llama_cpp
   - pip:
-      - transformers
-      - torch
+      flask[async]

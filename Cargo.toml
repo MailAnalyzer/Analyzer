@@ -16,7 +16,7 @@ serde = { version = "1.0.210", features = ["derive"] }
 tokio-stream = "0.1.16"
 async-trait = "0.1.83"
 rocket_cors = "0.6.0"
-reqwest = {features = ["json", "multipart"], version = "0.12.8"}
+reqwest = {features = ["json", "multipart", "stream"], version = "0.12.8"}
 regex = "1.11.0"
 url = "2.5.2"
 base64 = "0.22.1"

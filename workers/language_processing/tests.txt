@@ -1,12 +1,3 @@
-I'm going to give you a text, You will understand the text and extract ALL the organizations and persons ONLY, and the information that are related to them.
-First, identify all the organizations and the products, make sure they are all unique and are not a synonym of another.
-Second, you will identify the persons and the product.
-For each entity (so organizations, persons and products), you will search all the information IN THE TEXT ONLY that are related to them
-You'll respond in JSON in english.
-
-Here is the text :
-------
-
 Microsoft Corporation,One Microsoft Way,Redmond, WA 98052
 Déclaration de confidentialité
 |
@@ -46,7 +37,7 @@ Ne vous laissez plus intimider par vos nouveaux appareils: retrouvez vos marques
 La nouveauté sans l’inconnu
 ❯
 Regarder la vidéo
-Découvrez comment vous pouvez donner vie à tous vos rêves créatifs avec un ordinateur Surface Copilot+ PC. Vous souhaitez percer les secrets des artistes et savoir comment ils utilisent ces appareils? Découvrez le processus créatif de Karl Ndieli pour ses séances photo dans la vidéo ci-dessous.
+Découvrez comment vous pouvez donner vie à tous vos rêves créatifs avec un ordinateur Surface Copilot+ PC. Vous souhaitez percer les secrets des artistes et savoir comment ils utilisent ces appareils? Découvrez le processus créatif de Donald Trump pour ses séances photo dans la vidéo ci-dessous.
 Votre nouveau superpouvoir
 ❯
 Acheter Microsoft\u{a0}365
@@ -103,7 +94,7 @@ Ne vous laissez plus intimider par vos nouveaux appareils: retrouvez vos marques
 La nouveauté sans l’inconnu
 ❯
 Regarder la vidéo
-Découvrez comment vous pouvez donner vie à tous vos rêves créatifs avec un ordinateur Surface Copilot+ PC. Vous souhaitez percer les secrets des artistes et savoir comment ils utilisent ces appareils? Découvrez le processus créatif de Karl Ndieli pour ses séances photo dans la vidéo ci-dessous.
+Découvrez comment vous pouvez donner vie à tous vos rêves créatifs avec un ordinateur Surface Copilot+ PC. Vous souhaitez percer les secrets des artistes et savoir comment ils utilisent ces appareils? Découvrez le processus créatif de Donald Trump pour ses séances photo dans la vidéo ci-dessous.
 Votre nouveau superpouvoir
 ❯
 Acheter Microsoft\u{a0}365

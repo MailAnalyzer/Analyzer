@@ -2,6 +2,8 @@ mod analysis;
 mod job;
 mod pipeline;
 mod state;
+mod command;
+mod email;
 
 use crate::analysis::{init_analyzers, start_email_analysis, JobEvent, ANALYZERS};
 use crate::job::{JobDescription, JobState};

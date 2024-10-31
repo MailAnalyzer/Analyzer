@@ -1,4 +1,6 @@
-use crate::analysis::{AnalysisCommand, AnalysisSetup, AnalysisVerdict, MailAnalyzer};
+use crate::analysis::{AnalysisSetup, AnalysisVerdict, MailAnalyzer};
+use crate::command::AnalysisCommand;
+use crate::email::OwnedEmail;
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
 use base64::Engine;
@@ -9,7 +11,7 @@ use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use rocket::http::ext::IntoCollection;
 use url::Url;
 
 pub struct LinkAnalyzer;
@@ -20,16 +22,12 @@ impl MailAnalyzer for LinkAnalyzer {
         String::from("Links analysis")
     }
 
-    fn analyze(&self, email: Message, command: AnalysisCommand) -> AnalysisSetup {
-
+    fn analyze(&self, email: OwnedEmail, command: AnalysisCommand) -> AnalysisSetup {
+        let email = email.parse();
+        
         let client = Client::new();
 
-        let mut urls: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut domains: HashMap<String, HashSet<String>> = HashMap::new();
-
-        
-
-        let command = Arc::new(command);
+        let (urls, domains) = collect_all_links(email);
 
         for (url, tags) in urls {
             let client = client.clone();
@@ -48,13 +46,18 @@ impl MailAnalyzer for LinkAnalyzer {
                 client,
             ));
         }
-        command.gen_setup()
+        command.validate()
     }
 }
 
-fn collect_all_links(email: Message, urls: &mut HashMap<String, HashSet<String>>, domains: &mut HashMap<String, HashSet<String>>) {
+type LinkTags = HashMap<String, HashSet<String>>;
+
+fn collect_all_links(email: Message<'_>) -> (LinkTags, LinkTags) {
     let link_regex = Regex::new(r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)").unwrap();
-    
+
+    let mut urls: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut domains: HashMap<String, HashSet<String>> = HashMap::new();
+
     for part in email.text_bodies() {
         let text = part.text_contents().unwrap();
 
@@ -68,8 +71,9 @@ fn collect_all_links(email: Message, urls: &mut HashMap<String, HashSet<String>>
             let url = Url::parse(&url_str).unwrap();
             let domain = url.domain().unwrap();
 
-            insert_and_tag(urls, &url_str, "body");
-            insert_and_tag(domains, domain, "body");
+            insert_and_tag(&mut urls, &url_str, "body");
+            insert_and_tag(&mut domains, domain, "body");
+            insert_and_tag(&mut domains, &get_top_domain(domain), "deducted");
         }
     }
 
@@ -82,16 +86,26 @@ fn collect_all_links(email: Message, urls: &mut HashMap<String, HashSet<String>>
         let address = address.address().unwrap();
         match Url::try_from(address) {
             Ok(url) => {
-                insert_and_tag(urls, address, "sender");
-                insert_and_tag(domains, url.domain().unwrap(), "sender");
+                let domain = url.domain().unwrap();
+                insert_and_tag(&mut urls, address, "sender");
+                insert_and_tag(&mut domains, domain, "sender");
+                insert_and_tag(&mut domains, &get_top_domain(domain), "deducted");
             }
             Err(_) => {
                 if let Some(domain) = address.rsplit('@').next() {
-                    insert_and_tag(domains, domain, "sender");
+                    insert_and_tag(&mut domains, domain, "sender");
+                    insert_and_tag(&mut domains, &get_top_domain(domain), "deducted");
                 }
             }
         }
     }
+
+    (urls, domains)
+}
+
+fn get_top_domain(fqdn: &str) -> String {
+    let fqdn_items = fqdn.split('.').collect::<Vec<_>>();
+    fqdn_items[fqdn_items.len() - 2..].join(".")
 }
 
 fn insert_and_tag(map: &mut HashMap<String, HashSet<String>>, url: &str, tag: &str) {
@@ -257,10 +271,13 @@ async fn analyze_domain(domain: String, tags: Vec<String>, client: Client) -> An
 
     let content = response.text().await;
     match content {
-        Ok(content) => AnalysisVerdict::new("domain", &&LinkAnalysisVerdict {
-            tags,
-            report: serde_json::from_str(&content).unwrap(),
-        }),
+        Ok(content) => AnalysisVerdict::new(
+            "domain",
+            &&LinkAnalysisVerdict {
+                tags,
+                report: serde_json::from_str(&content).unwrap(),
+            },
+        ),
         Err(err) => {
             AnalysisVerdict::error(&vec![format!("Error domain analysis `{domain}`: {err:?}")])
         }
