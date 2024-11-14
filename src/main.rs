@@ -4,6 +4,7 @@ mod pipeline;
 mod state;
 mod command;
 mod email;
+mod entity;
 
 use crate::analysis::{init_analyzers, start_email_analysis, JobEvent, ANALYZERS};
 use crate::job::{JobDescription, JobState};
@@ -93,7 +94,7 @@ async fn submit_mail<'a>(
             });
         }
 
-        start_email_analysis(&job.email, analyzers.clone(), event_channel.clone()).await;
+        start_email_analysis(analyzers.clone(), job).await;
 
         Ok(Json(JobCreatedResponse { job_id }))
     } else {

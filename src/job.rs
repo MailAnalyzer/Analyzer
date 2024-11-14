@@ -50,6 +50,7 @@ impl Job {
     
     pub fn mark_as_complete(&self) {
         self.is_complete.store(true, Ordering::Release);
+        self.event_channel.send(JobEvent::JobComplete).unwrap();
     }
 }
 

@@ -13,7 +13,7 @@ log = "0.4.22"
 tokio = { version = "1.40.0", features = ["rt-multi-thread"] }
 serde_bytes = "0.11.15"
 serde = { version = "1.0.210", features = ["derive"] }
-tokio-stream = "0.1.16"
+tokio-stream = { version = "0.1.16", features = ["sync"] }
 async-trait = "0.1.83"
 rocket_cors = "0.6.0"
 reqwest = {features = ["json", "multipart", "stream"], version = "0.12.8"}

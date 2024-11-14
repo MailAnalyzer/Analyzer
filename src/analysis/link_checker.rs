@@ -1,6 +1,7 @@
 use crate::analysis::{AnalysisSetup, AnalysisVerdict, MailAnalyzer};
 use crate::command::AnalysisCommand;
 use crate::email::OwnedEmail;
+use crate::entity::Entity;
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
 use base64::Engine;
@@ -11,7 +12,6 @@ use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
-use rocket::http::ext::IntoCollection;
 use url::Url;
 
 pub struct LinkAnalyzer;
@@ -28,6 +28,16 @@ impl MailAnalyzer for LinkAnalyzer {
         let client = Client::new();
 
         let (urls, domains) = collect_all_links(email);
+        
+        let top_domains = domains.keys().filter(|d| d.chars().filter(|c| *c == '.').count() == 1);
+        
+        for top_domain in top_domains {
+            command.submit_entity(&Entity {
+                name: top_domain.clone(),
+                kind: String::from("domain"),
+                additional_info: vec![],
+            })
+        }
 
         for (url, tags) in urls {
             let client = client.clone();
@@ -70,7 +80,7 @@ fn collect_all_links(email: Message<'_>) -> (LinkTags, LinkTags) {
 
             let url = Url::parse(&url_str).unwrap();
             let domain = url.domain().unwrap();
-
+            
             insert_and_tag(&mut urls, &url_str, "body");
             insert_and_tag(&mut domains, domain, "body");
             insert_and_tag(&mut domains, &get_top_domain(domain), "deducted");

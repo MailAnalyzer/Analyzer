@@ -9,7 +9,9 @@ use reqwest::Client;
 use rocket::futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
+use rocket::serde::json::serde_json;
 use tl::Node;
+use crate::entity::Entity;
 
 pub struct NLPChecker;
 
@@ -23,7 +25,10 @@ impl MailAnalyzer for NLPChecker {
             Pipeline::once_root(move |_: AnalysisCommand| extract_all_text(email))
                 .next_fn(|text, _| analyze_text(text))
                 .next_fn(|llm_result, c| async move {
-                    c.result(AnalysisVerdict::new("nlp-summary", &llm_result.summary))
+                    c.result(AnalysisVerdict::new("nlp-summary", &llm_result.summary));
+                    for entity in &llm_result.entities {
+                        c.submit_entity(entity)
+                    }
                 }),
         );
         command.validate()
@@ -32,18 +37,19 @@ impl MailAnalyzer for NLPChecker {
 
 struct LLMAnalysisResponse {
     summary: String,
-    entities: String,
+    entities: Vec<Entity>,
 }
 
 async fn analyze_text(text: Arc<String>) -> LLMAnalysisResponse {
     match make_llm_request(text).await {
         Ok((summary, entities)) => LLMAnalysisResponse {
             summary,
-            entities,
+            entities: serde_json::from_str(&entities).unwrap(),
         },
+        //TODO handle error in a better way (ew)
         Err(err) => LLMAnalysisResponse {
             summary: err.clone(),
-            entities: err,
+            entities: vec![],
         },
     }
 }
