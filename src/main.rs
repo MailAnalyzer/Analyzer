@@ -5,6 +5,7 @@ mod state;
 mod command;
 mod email;
 mod entity;
+// mod investigation;
 
 use crate::analysis::{init_analyzers, start_email_analysis, JobEvent, ANALYZERS};
 use crate::job::{JobDescription, JobState};
@@ -12,7 +13,6 @@ use crate::state::{Jobs, ServerState, ServerStateEvent};
 use log::{log, Level};
 use mail_parser::MessageParser;
 use rocket::data::ByteUnit;
-use rocket::form::validate::Len;
 use rocket::futures::StreamExt;
 use rocket::http::{Method, Status};
 use rocket::response::stream::{Event, EventStream};

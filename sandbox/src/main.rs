@@ -1,22 +1,39 @@
 use lazy_static::lazy_static;
 use mail_parser::Message;
 use regex::Regex;
+use std::time::Duration;
+use thirtyfour::{By, ChromiumLikeCapabilities, DesiredCapabilities, WebDriver};
 use tl::Node;
-use url::Url;
 
 const IGNORED_HTML_TAGS: &[&str] = &["style", "script"];
 
-fn main() {
-    //let txt = include_str!("/home/maxime/Projects/Airbus/MailAnalyser/Backend/emails/email-microsoft.eml");
-    // let txt = include_str!("/home/maxime/Projects/Airbus/MailAnalyser/Backend/emails/CLUB DE JEUX AIRBUS PROTECT.eml");
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // selenium_stuff().await?;
 
-    // println!("{txt}");
+    
+    
+    Ok(())
+}
 
-    //let msg = MessageParser::new().parse(txt).unwrap();
-    //let result = extract_body_information(msg);
-    //println!("{:?}", result)
+async fn selenium_stuff() -> Result<(), Box<dyn std::error::Error>>  {
+    let mut caps = DesiredCapabilities::chrome();
+    caps.add_arg("--lang=en")?;
+    // caps.set_headless()?;
+    let driver = WebDriver::new("http://localhost:4444", caps)
+        .await
+        .unwrap();
+    driver.goto("https://google.com/search?q=youtube&hl=en").await?;
 
-    Url::parse("https://www.zizi.com/").expect("wtf");
+    driver.find(By::XPath("//div[text()='Accept all']")).await?.click().await?;
+    let element = driver.find(By::Css("span > a")).await?;
+
+
+
+    println!("{:?}", element.value().await?);
+
+    tokio::time::sleep(Duration::MAX).await;
+    Ok(())
 }
 
 fn get_body_string(message: Message) -> String {
@@ -45,7 +62,7 @@ struct ExtractedBodyInformation {
 
 fn extract_body_information(email: Message<'_>) -> ExtractedBodyInformation {
     let body = get_body_string(email);
-    
+
     let dom = tl::parse(&body, tl::ParserOptions::default()).unwrap();
     let parser = dom.parser();
 
