@@ -5,6 +5,7 @@ mod state;
 mod command;
 mod email;
 mod entity;
+mod splunk;
 // mod investigation;
 
 use crate::analysis::{init_analyzers, start_email_analysis, JobEvent, ANALYZERS};

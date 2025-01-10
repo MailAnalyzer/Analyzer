@@ -209,6 +209,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
+ "enum-assoc",
  "lazy_static",
  "log",
  "mail-auth",
@@ -222,6 +223,7 @@ dependencies = [
  "rocket_cors",
  "serde",
  "serde_bytes",
+ "serde_json",
  "snailquote",
  "thirtyfour",
  "tl",
@@ -349,9 +351,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.38"
+version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
+checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -635,6 +637,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1e6a265c649f3f5979b601d26f1d05ada116434c87741c9493cb56218f76cbc"
 dependencies = [
  "heck",
+ "proc-macro2",
+ "quote 1.0.37",
+ "syn 2.0.85",
+]
+
+[[package]]
+name = "enum-assoc"
+version = "1.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f4b100e337b021ae69f3e7dd82e230452c54ff833958446c4a3854c66dc9326"
+dependencies = [
  "proc-macro2",
  "quote 1.0.37",
  "syn 2.0.85",
@@ -2396,6 +2409,7 @@ name = "sandbox"
 version = "0.1.0"
 dependencies = [
  "backend",
+ "chrono",
  "lazy_static",
  "mail-parser",
  "regex",
@@ -2492,9 +2506,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.133"
+version = "1.0.135"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7fceb2473b9166b2294ef05efcb65a3db80803f0b03ef86a5fc88a2b85ee377"
+checksum = "2b0d7ba2887406110130a978386c4e1befb98c674b4fba677954e4db976630d9"
 dependencies = [
  "indexmap",
  "itoa",

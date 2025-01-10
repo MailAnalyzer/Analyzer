@@ -4,7 +4,8 @@ use regex::Regex;
 use reqwest::cookie::Jar;
 use reqwest::ClientBuilder;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+use chrono::{Timelike, Utc};
 use thirtyfour::{ChromiumLikeCapabilities, Cookie, DesiredCapabilities, SameSite, WebDriver};
 use tl::Node;
 use url::Url;
@@ -13,8 +14,9 @@ const IGNORED_HTML_TAGS: &[&str] = &["style", "script"];
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    selenium_stuff().await?;
+    //selenium_stuff().await?;
 
+    println!("{}", chrono::DateTime::<Utc>::from(SystemTime::now()).timestamp());
 
     Ok(())
 }
@@ -106,7 +108,6 @@ async fn make_splunk_search(client: reqwest::Client, csrf: String) {
             ("output_mode", "json"),
         ])
         //.header("Origin", "https://soc-siem.eu.airbus.corp:8000")
-        .header("Accept", "application/json")
         .header("X-Splunk-Form-Key", csrf)
         .header("X-Requested-With", "XMLHttpRequest")
         .build()
